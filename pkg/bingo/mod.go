@@ -260,6 +260,7 @@ func ModIndirectModules(modFile string) (mods []module.Version, err error) {
 	if err != nil {
 		return nil, err
 	}
+	defer errcapture.Do(&err, m.Close, "close")
 
 	for _, r := range m.RequireDirectives() {
 		if !r.Indirect {
