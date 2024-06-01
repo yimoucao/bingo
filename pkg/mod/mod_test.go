@@ -4,10 +4,11 @@
 package mod
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/pkg/errors"
 
 	"github.com/efficientgo/core/testutil"
 	"golang.org/x/mod/module"
