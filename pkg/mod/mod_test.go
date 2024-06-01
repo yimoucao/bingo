@@ -6,6 +6,7 @@ package mod
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -32,11 +33,16 @@ func TestFile(t *testing.T) {
 
 		_, err := OpenFile(testFile)
 		testutil.NotOk(t, err)
-		testutil.Equals(t, "open "+testFile+": no such file or directory", err.Error())
+		if runtime.GOOS == "windows" {
+			testutil.Equals(t, "open "+testFile+": The system cannot find the file specified.", err.Error())
+		} else {
+			testutil.Equals(t, "open "+testFile+": no such file or directory", err.Error())
+		}
 
 		testutil.Ok(t, os.WriteFile(testFile, []byte(``), os.ModePerm))
 		mf, err := OpenFile(testFile)
 		testutil.Ok(t, err)
+		defer mf.Close()
 
 		testutil.Equals(t, testFile, mf.Filepath())
 		p, comment := mf.Module()
@@ -95,6 +101,7 @@ exclude mvdan.cc/sh/v3 v3.4.4
 
 		mf, err := OpenFile(testFile)
 		testutil.Ok(t, err)
+		defer mf.Close()
 
 		p, comment := mf.Module()
 		testutil.Equals(t, "github.com/bwplotka/bingo", p)

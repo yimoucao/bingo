@@ -597,9 +597,10 @@ func getPackage(ctx context.Context, logger *log.Logger, c installPackageConfig,
 
 	// If we don't have all information, resolve version.
 	var fetchedDirectives nonRequireDirectives
+	var tmpEmptyModFile *bingo.ModFile
 	if target.Module.Version == "" || !strings.HasPrefix(target.Module.Version, "v") || target.Module.Path == "" {
 		// Set up totally empty mod file to get clear version to install.
-		tmpEmptyModFile, err := bingo.CreateFromExistingOrNew(ctx, c.runner, logger, "", tmpEmptyModFilePath)
+		tmpEmptyModFile, err = bingo.CreateFromExistingOrNew(ctx, c.runner, logger, "", tmpEmptyModFilePath)
 		if err != nil {
 			return errors.Wrap(err, "create empty tmp mod file")
 		}
@@ -621,9 +622,10 @@ func getPackage(ctx context.Context, logger *log.Logger, c installPackageConfig,
 
 	// Now we should have target with all required info, prepare tmp file.
 	// TODO(bwplotka): Is this still needed?
-	if err := cleanGoGetTmpFiles(c.modDir); err != nil {
-		return err
-	}
+	// if err := cleanGoGetTmpFiles(c.modDir); err != nil {
+	// 	return err
+	// }
+	defer errcapture.Do(&err, func() error { return cleanGoGetTmpFiles(c.modDir) }, "")
 
 	tmpModFile, err := bingo.CreateFromExistingOrNew(ctx, c.runner, logger, outModFile, tmpModFilePath)
 	if err != nil {
@@ -654,6 +656,12 @@ func getPackage(ctx context.Context, logger *log.Logger, c installPackageConfig,
 
 	if err := install(ctx, logger, c.runner, c.modDir, name, c.link, tmpModFile); err != nil {
 		return errors.Wrap(err, "install")
+	}
+
+	// close file before renaming. This step is required for Windows
+	_ = tmpModFile.Close()
+	if tmpEmptyModFile != nil {
+		_ = tmpEmptyModFile.Close()
 	}
 
 	// We were working on tmp file, do atomic rename.
@@ -752,6 +760,7 @@ func gobin(runnable runner.Runnable) (string, error) {
 }
 
 func install(ctx context.Context, logger *log.Logger, r *runner.Runner, modDir string, name string, link bool, modFile *bingo.ModFile) (err error) {
+	defer modFile.Close()
 	pkg := modFile.DirectPackage()
 	if err := validateTargetName(name); err != nil {
 		return errors.Wrap(err, pkg.String())
