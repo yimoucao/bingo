@@ -6,6 +6,7 @@ package main_test
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/efficientgo/core/errors"
 	"github.com/efficientgo/core/testutil"
+	"github.com/otiai10/copy"
 )
 
 type testProject struct {
@@ -27,19 +29,20 @@ func newTestProject(t testing.TB, base string, target string, isGoProject bool) 
 	wd, err := os.Getwd()
 	testutil.Ok(t, err)
 
-	_, err = execCmd(wd, nil, "cp", "-r", base, target)
+	// NOTE: go.1.23 support os.CopyFS. https://github.com/golang/go/issues/62484
+	err = copy.Copy(base, target)
 	testutil.Ok(t, err)
 
 	if isGoProject {
-		_, err = execCmd(wd, nil, "cp", filepath.Join(wd, "testdata", "main.go"), target)
+		err = copy.Copy(filepath.Join(wd, "testdata", "main.go"), filepath.Join(target, "main.go"))
 		testutil.Ok(t, err)
-		_, err = execCmd(wd, nil, "cp", filepath.Join(wd, "testdata", "go.mod"), target)
+		err = copy.Copy(filepath.Join(wd, "testdata", "go.mod"), filepath.Join(target, "go.mod"))
 		testutil.Ok(t, err)
-		_, err = execCmd(wd, nil, "cp", filepath.Join(wd, "testdata", "go.sum"), target)
+		err = copy.Copy(filepath.Join(wd, "testdata", "go.sum"), filepath.Join(target, "go.sum"))
 		testutil.Ok(t, err)
 	}
 
-	_, err = execCmd(wd, nil, "cp", filepath.Join(wd, "testdata", "Makefile"), target)
+	err = copy.Copy(filepath.Join(wd, "testdata", "Makefile"), filepath.Join(target, "Makefile"))
 	testutil.Ok(t, err)
 	return &testProject{
 		pwd:         wd,
@@ -153,14 +156,14 @@ func buildInitialGobin(t *testing.T, targetDir string) {
 
 	_, err = execCmd(wd, nil, "make", "build")
 	testutil.Ok(t, err)
-	_, err = execCmd(wd, nil, "cp", filepath.Join(os.Getenv("GOBIN"), bingoBin), targetDir)
+	err = copy.Copy(filepath.Join(os.Getenv("GOBIN"), bingoBin), targetDir)
 	testutil.Ok(t, err)
 }
 
 func makePath(t *testing.T) string {
 	t.Helper()
 
-	makePath, err := execCmd("", nil, "which", "make")
+	makePath, err := exec.LookPath("make")
 	testutil.Ok(t, err)
 	return strings.TrimSuffix(makePath, "\n")
 }
@@ -172,7 +175,7 @@ func newIsolatedGoEnv(t testing.TB, goproxy string) *goEnv {
 	tmpDir, err = filepath.Abs(tmpDir)
 	testutil.Ok(t, err)
 
-	goRoot, err := execCmd("", nil, "which", "go")
+	goRoot, err := exec.LookPath("go")
 	testutil.Ok(t, err)
 
 	gopath := filepath.Join(tmpDir, "gopath")
@@ -191,7 +194,7 @@ func newIsolatedGoEnv(t testing.TB, goproxy string) *goEnv {
 func (g *goEnv) Clear(t testing.TB) {
 	t.Helper()
 
-	_, err := execCmd("", nil, "chmod", "-R", "777", g.tmpDir)
+	err := ChmodRecursively(g.tmpDir, 0777)
 	testutil.Ok(t, err)
 
 	dirs, err := os.ReadDir(g.tmpDir)
@@ -211,10 +214,11 @@ func (g *goEnv) TmpDir() string {
 }
 
 func (g *goEnv) syntheticEnv() []string {
+	p := strings.Join([]string{g.goroot, g.tmpDir, g.gobin}, string(os.PathListSeparator))
 	return []string{
 		// Make sure we don't require clang to build etc.
 		"CGO_ENABLED=0",
-		fmt.Sprintf("PATH=%s:%s:%s", g.goroot, g.tmpDir, g.gobin),
+		fmt.Sprintf("PATH=%s", p),
 		fmt.Sprintf("GO=%s", filepath.Join(g.goroot, "go")),
 		fmt.Sprintf("GOBIN=%s", g.gobin),
 		fmt.Sprintf("GOPATH=%s", g.gopath),
@@ -258,7 +262,21 @@ func (g *goEnv) existingBinaries(t *testing.T) []string {
 func (g *goEnv) Close(t testing.TB) {
 	t.Helper()
 
-	_, err := execCmd("", nil, "chmod", "-R", "777", g.tmpDir)
+	err := ChmodRecursively(g.tmpDir, 0777)
 	testutil.Ok(t, err)
 	testutil.Ok(t, os.RemoveAll(g.tmpDir))
+}
+
+func ChmodRecursively(root string, mode fs.FileMode) error {
+	return filepath.Walk(root,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			err = os.Chmod(path, mode)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
 }

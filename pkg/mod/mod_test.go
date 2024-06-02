@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pkg/errors"
+
 	"github.com/efficientgo/core/testutil"
 	"golang.org/x/mod/module"
 )
@@ -32,11 +34,15 @@ func TestFile(t *testing.T) {
 
 		_, err := OpenFile(testFile)
 		testutil.NotOk(t, err)
-		testutil.Equals(t, "open "+testFile+": no such file or directory", err.Error())
+		/* on Windows error msg for NotExist is "The system cannot find the file specified", which
+		is different from "no such file or directory
+		*/
+		testutil.Assert(t, errors.Is(err, os.ErrNotExist))
 
 		testutil.Ok(t, os.WriteFile(testFile, []byte(``), os.ModePerm))
 		mf, err := OpenFile(testFile)
 		testutil.Ok(t, err)
+		defer mf.Close()
 
 		testutil.Equals(t, testFile, mf.Filepath())
 		p, comment := mf.Module()
@@ -95,6 +101,7 @@ exclude mvdan.cc/sh/v3 v3.4.4
 
 		mf, err := OpenFile(testFile)
 		testutil.Ok(t, err)
+		defer mf.Close()
 
 		p, comment := mf.Module()
 		testutil.Equals(t, "github.com/bwplotka/bingo", p)

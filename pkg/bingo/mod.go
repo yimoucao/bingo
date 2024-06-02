@@ -77,6 +77,10 @@ func (m Package) Path() string {
 	return path.Join(m.Module.Path, m.RelPath)
 }
 
+func (m Package) FilePath() string {
+	return filepath.Join(m.Module.Path, m.RelPath)
+}
+
 // ModFile is a wrapper over module file with bingo specific data.
 type ModFile struct {
 	*mod.File
@@ -260,6 +264,7 @@ func ModIndirectModules(modFile string) (mods []module.Version, err error) {
 	if err != nil {
 		return nil, err
 	}
+	defer errcapture.Do(&err, m.Close, "close")
 
 	for _, r := range m.RequireDirectives() {
 		if !r.Indirect {
