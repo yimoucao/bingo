@@ -466,14 +466,14 @@ func encodePath(path string) string {
 // resolveInGoModCache will try to find a referenced module in the Go modules cache.
 func resolveInGoModCache(logger *log.Logger, verbose bool, cacheModPath string, target *bingo.Package) error {
 	modMetaCache := filepath.Join(cacheModPath, "cache/download")
-	modulePath := target.Path()
+	modulePath := target.FilePath()
 	// Case sensitivity problem is fixed by replacing upper case with '/!<lower case letter>` signature.
 	// See https://tip.golang.org/cmd/go/#hdr-Module_proxy_protocol
 	lookupModulePath := encodePath(modulePath)
 
 	// Since we don't know which part of full path is package, which part is module.
 	// Start from longest and go until we find one.
-	for ; len(strings.Split(lookupModulePath, "/")) >= 2; func() {
+	for ; len(strings.Split(lookupModulePath, string(os.PathSeparator))) >= 2; func() {
 		lookupModulePath = filepath.Dir(lookupModulePath)
 		modulePath = filepath.Dir(modulePath)
 	}() {
