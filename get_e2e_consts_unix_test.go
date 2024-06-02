@@ -3,5 +3,5 @@
 package main_test
 
 const (
-	bingoBin = "bingo.exe"
+	bingoBin = "bingo"
 )
