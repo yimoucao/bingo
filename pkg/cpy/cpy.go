@@ -39,7 +39,3 @@ func File(src, dst string) (err error) {
 	}
 	return nil
 }
-
-func Executable(src, dst string) (err error) {
-	return File(ensureExe(src), ensureExe(dst))
-}

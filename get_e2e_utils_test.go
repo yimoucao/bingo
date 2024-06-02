@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bwplotka/bingo/pkg/cpy"
 	"github.com/efficientgo/core/errors"
 	"github.com/efficientgo/core/testutil"
 	"github.com/otiai10/copy"
@@ -157,7 +156,7 @@ func buildInitialGobin(t *testing.T, targetDir string) {
 
 	_, err = execCmd(wd, nil, "make", "build")
 	testutil.Ok(t, err)
-	err = cpy.Executable(filepath.Join(os.Getenv("GOBIN"), bingoBin), targetDir)
+	err = copy.Copy(filepath.Join(os.Getenv("GOBIN"), bingoBin), targetDir)
 	testutil.Ok(t, err)
 }
 
