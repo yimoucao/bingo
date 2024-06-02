@@ -466,16 +466,16 @@ func encodePath(path string) string {
 // resolveInGoModCache will try to find a referenced module in the Go modules cache.
 func resolveInGoModCache(logger *log.Logger, verbose bool, cacheModPath string, target *bingo.Package) error {
 	modMetaCache := filepath.Join(cacheModPath, "cache/download")
-	modulePath := target.FilePath()
+	modulePath := target.Path() // module path is in "a/b/c" by convention
 	// Case sensitivity problem is fixed by replacing upper case with '/!<lower case letter>` signature.
 	// See https://tip.golang.org/cmd/go/#hdr-Module_proxy_protocol
 	lookupModulePath := encodePath(modulePath)
 
 	// Since we don't know which part of full path is package, which part is module.
 	// Start from longest and go until we find one.
-	for ; len(strings.Split(lookupModulePath, string(os.PathSeparator))) >= 2; func() {
-		lookupModulePath = filepath.Dir(lookupModulePath)
-		modulePath = filepath.Dir(modulePath)
+	for ; len(strings.Split(lookupModulePath, "/")) >= 2; func() {
+		lookupModulePath = path.Dir(lookupModulePath)
+		modulePath = path.Dir(modulePath)
 	}() {
 		modMetaDir := filepath.Join(modMetaCache, lookupModulePath, "@v")
 		if _, err := os.Stat(modMetaDir); err != nil {
@@ -499,7 +499,6 @@ func resolveInGoModCache(logger *log.Logger, verbose bool, cacheModPath string, 
 			if err != nil {
 				return errors.Wrapf(err, "get latest version from %v", filepath.Join(modMetaDir, "list"))
 			}
-
 			target.Module.Path = modulePath
 			target.Module.Version = latest
 			target.RelPath = strings.TrimPrefix(strings.TrimPrefix(target.RelPath, target.Module.Path), "/")
@@ -599,23 +598,29 @@ func getPackage(ctx context.Context, logger *log.Logger, c installPackageConfig,
 	var fetchedDirectives nonRequireDirectives
 	if target.Module.Version == "" || !strings.HasPrefix(target.Module.Version, "v") || target.Module.Path == "" {
 		// Set up totally empty mod file to get clear version to install.
-		tmpEmptyModFile, err := bingo.CreateFromExistingOrNew(ctx, c.runner, logger, "", tmpEmptyModFilePath)
-		if err != nil {
-			return errors.Wrap(err, "create empty tmp mod file")
-		}
-
-		defer errcapture.Do(&err, tmpEmptyModFile.Close, "close")
-
-		runnable := c.runner.With(ctx, tmpEmptyModFile.Filepath(), c.modDir, nil)
-		if err := resolvePackage(logger, c.verbose, tmpEmptyModFile.Filepath(), runnable, &target); err != nil {
-			return err
-		}
-
-		if !strings.HasSuffix(target.Module.Version, "+incompatible") {
-			fetchedDirectives, err = autoFetchDirectives(runnable, logger, target)
+		err := func() error {
+			tmpEmptyModFile, err := bingo.CreateFromExistingOrNew(ctx, c.runner, logger, "", tmpEmptyModFilePath)
 			if err != nil {
+				return errors.Wrap(err, "create empty tmp mod file")
+			}
+
+			defer errcapture.Do(&err, tmpEmptyModFile.Close, "close")
+
+			runnable := c.runner.With(ctx, tmpEmptyModFile.Filepath(), c.modDir, nil)
+			if err := resolvePackage(logger, c.verbose, tmpEmptyModFile.Filepath(), runnable, &target); err != nil {
 				return err
 			}
+
+			if !strings.HasSuffix(target.Module.Version, "+incompatible") {
+				fetchedDirectives, err = autoFetchDirectives(runnable, logger, target)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			return err
 		}
 	}
 
